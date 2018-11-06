@@ -36,6 +36,7 @@
     "express": "^4.15.5",
     "highlightjs": "^9.10.0",
     "js-yaml": "latest",
+    "make-dir": "^1.3.0",
     "markdown-it": "latest",
     "markdown-it-attrs": "^1.2.1",
     "markdown-it-emoji": "^1.4.0",

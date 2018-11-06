@@ -1,7 +1,11 @@
-<script src="source/javascripts/lib/_jquery.js"></script>
-<script src="source/javascripts/lib/_energize.js"></script>
-<script src="source/javascripts/app/_lang.js"></script>
-<script src="source/javascripts/app/_toc.js"></script>
+<script src="|PATH|/lib/_jquery.js"></script>
+<script src="|PATH|/lib/_jquery.highlight.js"></script>
+<script src="|PATH|/lib/_lunr.js"></script>
+<script src="|PATH|/lib/_imagesloaded.min.js"></script>
+<script src="|PATH|/lib/_energize.js"></script>
+<script src="|PATH|/app/_lang.js"></script>
+<script src="|PATH|/app/_search.js"></script>
+<script src="|PATH|/app/_toc.js"></script>
 <script type="text/javascript">
 $(function() {
   loadToc($('#toc'), '.toc-link', '.toc-list-h2, .toc-list-h3, .toc-list-h4, .toc-list-h5, .toc-list-h6', 10);
