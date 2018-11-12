@@ -34,7 +34,7 @@
     "compression": "^1.6.2",
     "ejs": "^2.5.1",
     "express": "^4.15.5",
-    "highlightjs": "^9.10.0",
+    "highlightjs": "^9.12.0",
     "js-yaml": "latest",
     "make-dir": "^1.3.0",
     "markdown-it": "latest",

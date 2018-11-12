@@ -5,7 +5,7 @@ const util = require('util');
 const makeDir = require('make-dir');
 const maybe = require('call-me-maybe');
 var hljs = require('highlightjs/highlight.pack.js');
-var hlpath = require.resolve('highlightjs/highlight.pack.js').replace('highlight.pack.js', '');
+var HLJS_PATH = require.resolve('highlightjs/highlight.pack.js').replace('highlight.pack.js', '');
 const emoji = require('markdown-it-emoji');
 const attrs = require('markdown-it-attrs');
 const yaml = require('js-yaml');
@@ -35,7 +35,7 @@ md.use(emoji);
 let GLOBAL_OPTIONS = {};
 
 // The location of the EJS template
-const EJS_TEMPLATE_FILE = path.resolve(path.join(__dirname, '/source/layouts/layout.ejs'));
+let EJS_TEMPLATE_FILE = path.resolve(path.join(__dirname, '/source/layouts/layout.ejs'));
 // Where assets files are located
 let SOURCE_LOCATION = path.join(__dirname, '/source/');
 // Where assets will be saved
@@ -71,6 +71,38 @@ class FolderGroup {
     }
 
     /**
+     * If this is a relative path, returns the root without the
+     * base folder, otherwise returns the entire root.
+     *
+     * @readonly
+     * @memberof FolderGroup
+     */
+    get dirname() {
+        if (this.is_relative) {
+            return this._dir_without_root();
+        } else {
+            return this.root;
+        }
+    }
+
+    /**
+     * Returns the appropriate folder for the provided filename.
+     * Will be the root folder, if the folder cannot be resolved.
+     *
+     * @param {string} filename
+     * @memberof FolderGroup
+     * @returns {string}
+     */
+    folderForFile(filename) {
+        let file_extension = path.extname(filename).slice(1);
+        if (this[file_extension]) {
+            return this[file_extension];
+        } else {
+            return this.root;
+        }
+    }
+
+    /**
      * The CSS directory for this location
      *
      * @type {string}
@@ -78,11 +110,10 @@ class FolderGroup {
      * @memberof WebDir
      */
     get css() {
-        if (this.is_relative) {
-            return this._dir_without_root() + '/css';
-        } else {
-            return this.root + '/css';
-        }
+        return this.dirname + '/css';
+        // } else {
+        //     return this.root + '/css';
+        // }
     }
 
     /**
@@ -93,11 +124,12 @@ class FolderGroup {
      * @memberof WebDir
      */
     get fonts() {
-        if (this.is_relative) {
-            return this._dir_without_root() + '/fonts';
-        } else {
-            return this.root + '/fonts';
-        }
+        return this.dirname + '/fonts';
+        // if (this.is_relative) {
+        //     return this._dir_without_root() + '/fonts';
+        // } else {
+        //     return this.root + '/fonts';
+        // }
     }
 
     /**
@@ -108,11 +140,12 @@ class FolderGroup {
      * @memberof WebDir
      */
     get img() {
-        if (this.is_relative) {
-            return this._dir_without_root() + '/img';
-        } else {
-            return this.root + '/img';
-        }
+        return this.dirname + '/img';
+        // if (this.is_relative) {
+        //     return this._dir_without_root() + '/img';
+        // } else {
+        //     return this.root + '/img';
+        // }
     }
 
     /**
@@ -123,11 +156,12 @@ class FolderGroup {
      * @memberof WebDir
      */
     get js() {
-        if (this.is_relative) {
-            return this._dir_without_root() + '/js';
-        } else {
-            return this.root + '/js';
-        }
+        return this.dirname + '/js';
+        // if (this.is_relative) {
+        //     return this._dir_without_root() + '/js';
+        // } else {
+        //     return this.root + '/js';
+        // }
     }
 }
 
@@ -169,39 +203,69 @@ function writeToDest(destination, data) {
 }
 
 /**
+ * Joins the provided paths. Tries to avoid joining 2 paths with the same normalized value
+ * @param {string} path_string
+ * @returns {string}
+ */
+function joinPath() {
+    let last_path_string;
+    let return_path = '';
+    for (let path_string of arguments) {
+        if (typeof last_path_string === 'undefined' || (typeof last_path_string !== 'undefined' && last_path_string !== path.normalize(path_string))) {
+            return_path = path.join(return_path, path_string);
+            last_path_string = path.normalize(path_string)
+        }
+    }
+    return path.normalize(return_path);
+}
+
+/**
  * Tries to find path_string. Returns an empty string if unsuccessful,
  * or the full path of the resolved location, if found.
  *
  * @param {string} path_string
- * @param {initial_path} An optional path to check before checking other paths
+ * @param {string} initial_path An optional path to check before checking other paths
+ * @param {object} opts A substitute for GLOBAL_OPTIONS which should contain .src and .internal_source
  * @returns {string}
  */
-function resolvePath(path_string, initial_path) {
-    let filepath;
+function resolvePath(path_string, initial_path, opts) {
+    let int_opts = opts || GLOBAL_OPTIONS;
+    let lookup_paths = [];
+
     if (typeof initial_path === 'string' && initial_path.trim() !== '') {
-        filepath = path.join(initial_path, path_string);
-        if (fs.existsSync(filepath)) {
-            return filepath;
+        lookup_paths.push(path.join(initial_path, path_string));
+    }
+    if (path.resolve(path_string) === path.normalize(path_string)) {
+        lookup_paths.push(path_string);
+    } else {
+        lookup_paths.push(path.resolve(path_string));
+    }
+
+    if (int_opts) {
+        if (int_opts.src) {
+            lookup_paths.push(path.join(int_opts.src.folderForFile(path_string), path_string));
+            ['root', 'img', 'js', 'css', 'fonts'].map(child_path => {
+                [int_opts.src].map(webdir => {
+                    lookup_paths.push(path.join(webdir[child_path], path_string));
+                });
+            });
+        }
+        if (int_opts.internal_source) {
+            lookup_paths.push(path.join(int_opts.internal_source.folderForFile(path_string), path_string));
+            ['root', 'img', 'js', 'css', 'fonts'].map(child_path => {
+                [int_opts.internal_source].map(webdir => {
+                    lookup_paths.push(path.join(webdir[child_path], path_string));
+                });
+            });
         }
     }
 
-    filepath = path.resolve(path_string);
-    if (fs.existsSync(filepath)) {
-        return filepath;
-    }
-
-    let lookup_paths = [];
-    ['img', 'js', 'css', 'fonts'].map(child_path => {
-        [GLOBAL_OPTIONS.src, GLOBAL_OPTIONS.internal_source].map(webdir => {
-            lookup_paths.push(webdir[child_path]);
-        });
-    });
-    lookup_paths.push(path.join(hlpath, '/styles/'));
+    lookup_paths.push(path.join(HLJS_PATH, '/styles/', path_string));
     let found_path = lookup_paths.find(this_path => {
-        return fs.existsSync(path.join(this_path, path_string));
+        return fs.existsSync(this_path);
     });
     if (found_path) {
-        return path.normalize(path.join(found_path, path_string));
+        return found_path;
     } else {
         console.warn('Could not find ' + path_string + '!');
         return undefined;
@@ -254,7 +318,7 @@ function includeJSTag(include) {
     let includeStr = resolvePath(include + '.inc');
     if (includeStr) {
         let jsScript = safeReadFileSync(includeStr, 'utf8');
-        getSrcLinks(jsScript).map(function(file_link) { // Copy referenced files to the build location
+        getSrcLinks(jsScript).map(function(file_link) {
             let clean_file_link = file_link.replace(/\|PATH\|/g, '');
             let sub_dir = path.dirname(clean_file_link);
             let source_file = resolvePath(clean_file_link, path.dirname(includeStr));
@@ -521,6 +585,13 @@ function render(inputStr, options, callback) {
         ? options.webRoot
         : LOCAL_WEB_ROOT
     )));
+
+    let custom_template_file = resolvePath('/layouts/layout.ejs', options.src.root, options);
+    EJS_TEMPLATE_FILE = custom_template_file
+        ? custom_template_file
+        : EJS_TEMPLATE_FILE
+        // : resolvePath(path.resolve(path.join(__dirname, '/source/layouts/layout.ejs')))
+    ;
 
     // Path for the root web directory
     options.web = new FolderGroup(path.parse(options.local.root).name);
