@@ -681,6 +681,8 @@ function render(inputStr, options, callback) {
         locals.partial = partial;
         locals.image_tag = function (image, altText, className) { // @TODO: Make a global tag library to be re-used
             let imageSource = resolvePath(image); // @TODO: Make a single path resolver
+            let imageAlt = (typeof altText === 'undefined') ? '' : altText;
+            let imageClass = (typeof className === 'undefined') ? '' : className;
             if (imageSource) {
                 if (GLOBAL_OPTIONS.inline) {
                     // var imgContent = safeReadFileSync(path.join(__dirname, imageSource));
@@ -689,7 +691,7 @@ function render(inputStr, options, callback) {
                 } else {
                     imageSource = copyToDest(GLOBAL_OPTIONS.local.img, imageSource);
                 }
-                return '<img src="' + imageSource + '" class="' + className + '" alt="' + altText + '">';
+                return '<img src="' + imageSource + '" class="' + imageClass + '" alt="' + imageAlt + '">';
             } else {
                 return '';
             }
