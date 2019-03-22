@@ -2,6 +2,8 @@
   "name": "shins",
   "version": "2.3.2-1",
   "description": "Shins Is Not Slate",
+  "bundleDependencies": false,
+  "deprecated": false,
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -11,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jobrad/shins"
+    "url": "git+https://github.com/jobrad/shins.git"
   },
   "keywords": [
     "shins",
@@ -22,7 +24,9 @@
     "documentation",
     "docs"
   ],
-  "author": "Joseph T. Bradley",
+  "author": {
+    "name": "Mike Ralphson"
+  },
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/jobrad/shins/issues"

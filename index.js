@@ -220,6 +220,62 @@ function joinPath() {
 }
 
 /**
+ * Returns HTML for the provided tagName, with any attributes and the tag value populated.
+ * If the tag is a self-closing tag, it will be self-closed, provided no
+ * tagValue is provided.
+ *
+ * @param {string} tagName
+ * @param {object} attributeObj
+ * @param {string} tagValue
+ * @returns {string}
+ */
+function makeHTMLTag(tagName, attributeObj, tagValue) {
+    const self_closing_tags = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+                                'link', 'meta', 'param', 'source', 'track', 'wbr', 'command',
+                                'keygen', 'menuitem'];
+    let tag_name = tagName.toLowerCase().trim();
+    let attribute_obj, tag_value;
+    if (typeof attributeObj === 'object') {
+        attribute_obj = attributeObj;
+    }
+    if (typeof tagValue !== 'undefined') {
+        tag_value = tagValue;
+    } else if (typeof tagValue === 'undefined' && typeof attributeObj !== 'object') {
+        tag_value = attributeObj;
+        attribute_obj = {};
+    }
+
+    let tag_src = '<' + tag_name + ' ';
+    tag_src += Object.keys(attribute_obj).map(function (attr) {
+        let attr_value = attribute_obj[attr];
+        let quote_char = '';
+        if (typeof attr_value === 'string') {
+            if (attr_value.trim() === '' && ['id', 'class'].indexOf(attr) > -1) {
+                attr_value = undefined;
+            } else {
+                attr_value = attr_value.replace(/"/g, '\'');
+                quote_char = '"';
+            }
+        } else if (typeof attr_value === 'object') {
+            attr_value = Object.keys(attr_value).map(attr => {
+                let val = attr_value[attr];
+                if (typeof val === 'string') val = '\'' + val + '\'';
+                return [attr, val].join('=');
+            }).join(';');
+            quote_char = '"';
+        }
+        return attr + '=' + quote_char + attr_value + quote_char;
+    }).join(' ');
+
+    if (typeof tag_value === 'undefined') {
+        tag_src += ' ' + (self_closing_tags.indexOf(tag_name) > -1 ? '/' : '') + '>';
+    } else {
+        tag_src += '>' + tag_value + '</' + tag_name + '>';
+    }
+    return tag_src;
+}
+
+/**
  * Tries to find path_string. Returns an empty string if unsuccessful,
  * or the full path of the resolved location, if found.
  *
@@ -417,11 +473,13 @@ function includeStylesheetTag(stylesheet, media) {
         ? stylesheets.map(s_path => {
                 let styleContent = safeReadFileSync(s_path, "utf8");
                 styleContent = styleContent.replace(/\.\.\/\.\.\/source\//gi, GLOBAL_OPTIONS.web._dir_without_root);
-                return '<style media="' + media + '">' + styleContent + '</style>';
+                return makeHTMLTag('style', {media: media}, styleContent);
+                // return '<style media="' + media + '">' + styleContent + '</style>';
             })
         : stylesheets.map(s_path => {
                 let stylesheet_path = copyToDest(GLOBAL_OPTIONS.local.css, s_path);
-                return '<link rel="stylesheet" media="' + media + '" href="' + stylesheet_path + '">';
+                return makeHTMLTag('link', {rel: 'stylesheet', media: media, href: stylesheet_path});
+                // return '<link rel="stylesheet" media="' + media + '" href="' + stylesheet_path + '">';
             })
     ;
     return stylesheets.join('\n');
@@ -488,6 +546,21 @@ function cleanId(id) {
 }
 
 /**
+ * If the provided value is a non-empty string, returns
+ * the provided value, trimmed. Otherwise returns undefined.
+ *
+ * @param {string} strValue
+ * @returns {string|undefined}
+ */
+function getStringValueOrUndefined(strValue) {
+    let returnValue;
+    if (typeof strValue === 'string') {
+        if (strValue.trim() !== '') returnValue = strValue.trim();
+    }
+    return returnValue;
+}
+
+/**
  * Adds GitHub autolinks to automatically-generated headers and normalizes ids in the content
  *
  * @param {string} content
@@ -516,13 +589,30 @@ function clean(s) {
     if (!s) return '';
     if (GLOBAL_OPTIONS.unsafe) return s;
     let sanitizeOptions = {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat([ 'h1', 'h2', 'img', 'aside', 'article', 'details',
-            'summary', 'abbr', 'meta', 'link' ]),
-        allowedAttributes: { a: [ 'href', 'id', 'name', 'target', 'class' ], img: [ 'src', 'alt', 'class' ] , aside: [ 'class' ],
-            abbr: [ 'title', 'class' ], details: [ 'open', 'class' ], div: [ 'class' ], meta: [ 'name', 'content' ],
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(
+            [ 'aside', 'h1', 'h2', 'i', 'span', 'img', 'button', 'aside', 'article', 'details', 'summary', 'abbr', 'meta', 'link' ]),
+        allowedAttributes: {
+            a: [ 'href', 'name', 'target', 'title', 'alt'],
+            abbr: [ 'title', ],
+            button: ['type'],
+            details: [ 'open' ],
+            div: [ 'role' ],
+            img: [ 'src', 'alt', 'title' ],
             link: [ 'rel', 'href', 'type', 'sizes' ],
-            h1: [ 'id' ], h2: [ 'id' ], h3: [ 'id' ], h4: [ 'id' ], h5: [ 'id' ], h6: [ 'id' ]}
+            meta: [ 'name', 'content' ],
+        }
     };
+    sanitizeOptions.allowedTags.map(tag => {
+        if (typeof sanitizeOptions.allowedAttributes[tag] === 'undefined') {
+            sanitizeOptions.allowedAttributes[tag] = [];
+        }
+        ['aria', 'class', 'id'].map(attr => {
+            if (sanitizeOptions.allowedAttributes[tag].indexOf(attr) === -1) {
+                sanitizeOptions.allowedAttributes[tag].push(attr);
+            }
+        });
+    });
+
     // replace things which look like tags which sanitizeHtml will eat
     s = s.split('\n>').join('\n$1$');
     s = s.split('>=').join('$2$');
@@ -589,19 +679,22 @@ function render(inputStr, options, callback) {
     let custom_template_file = resolvePath('/layouts/layout.ejs', options.src.root, options);
     EJS_TEMPLATE_FILE = custom_template_file
         ? custom_template_file
-        : EJS_TEMPLATE_FILE
-        // : resolvePath(path.resolve(path.join(__dirname, '/source/layouts/layout.ejs')))
-    ;
+        : EJS_TEMPLATE_FILE;
 
     // Path for the root web directory
     options.web = new FolderGroup(path.parse(options.local.root).name);
 
     return maybe(callback, new Promise(function (resolve, reject) {
         GLOBAL_OPTIONS = options;
+        ['logo-url'].map(function(option_key) {
+            GLOBAL_OPTIONS[option_key] = getStringValueOrUndefined(GLOBAL_OPTIONS[option_key]);
+            if (typeof GLOBAL_OPTIONS[option_key] === 'undefined') {
+                delete GLOBAL_OPTIONS[option_key];
+            }
+        });
 
         inputStr = '\n' + splitlines(inputStr.trim()).join('\n'); // @TODO: Make this section a function?
         let inputArr = inputStr.split('\n---\n');
-        // if (inputArr.length === 1) { inputArr = ('\n' + inputStr).split('\n--- \n'); }
         let headerStr = inputArr[1];
         let header = yaml.safeLoad(headerStr);
 
@@ -680,18 +773,17 @@ function render(inputStr, options, callback) {
         };
         locals.partial = partial;
         locals.image_tag = function (image, altText, className) { // @TODO: Make a global tag library to be re-used
-            let imageSource = resolvePath(image); // @TODO: Make a single path resolver
+            let imageSource = resolvePath(image);
             let imageAlt = (typeof altText === 'undefined') ? '' : altText;
             let imageClass = (typeof className === 'undefined') ? '' : className;
             if (imageSource) {
                 if (GLOBAL_OPTIONS.inline) {
-                    // var imgContent = safeReadFileSync(path.join(__dirname, imageSource));
                     var imgContent = safeReadFileSync(imageSource); // @TODO: Make a function that accepts a boolean value for whether the content of the file should be returned, or if it should be wrapped in a tag, with options
                     imageSource = "data:image/png;base64," + Buffer.from(imgContent).toString('base64');
                 } else {
                     imageSource = copyToDest(GLOBAL_OPTIONS.local.img, imageSource);
                 }
-                return '<img src="' + imageSource + '" class="' + imageClass + '" alt="' + imageAlt + '">';
+                return makeHTMLTag('img', {src: imageSource, class: imageClass, alt: imageAlt});
             } else {
                 return '';
             }
@@ -705,9 +797,9 @@ function render(inputStr, options, callback) {
                 } else {
                     imageSource = copyToDest(GLOBAL_OPTIONS.local.img, imageSource);
                 }
-                imageSource = '<img src="' + imageSource + '" class="logo" alt="Logo">';
+                imageSource = makeHTMLTag('img', {src: imageSource, class: "logo", alt: "Logo"});
                 if (GLOBAL_OPTIONS['logo-url']) {
-                    imageSource = '<a href="' + md.utils.escapeHtml(GLOBAL_OPTIONS['logo-url']) + '">' + imageSource + '</a>';
+                    imageSource = makeHTMLTag('a', {href: md.utils.escapeHtml(GLOBAL_OPTIONS['logo-url'])}, imageSource);
                 }
                 return imageSource;
             } else {
